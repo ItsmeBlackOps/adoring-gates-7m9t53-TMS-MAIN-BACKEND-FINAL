@@ -14,15 +14,17 @@ warnings.filterwarnings("ignore")
 app = Flask(__name__)
 
 CORS(app)
-def extract_date_time(normalized_text):
+
+
+def extract_date_time(text_data):
     # Define a pattern to extract the time zone
     timezone_pattern = r"\((.*?)\)"
-    timezone_match = re.search(timezone_pattern, normalized_text)
+    timezone_match = re.search(timezone_pattern, text_data)
     timezone_str = timezone_match.group(1).strip() if timezone_match else None
 
     # Extract the date and time string (excluding time zone)
     date_time_pattern = r"Data and Time of Interview \(Mention time zone\):\s*(.*?)\s*Duration"
-    date_time_match = re.search(date_time_pattern, normalized_text)
+    date_time_match = re.search(date_time_pattern, text_data)
     date_time_str = date_time_match.group(
         1).strip() if date_time_match else None
 
@@ -113,13 +115,40 @@ def process_data():
         duration_pattern = r"Duration (\d+\s*\w+)"
 
         # Extract information using the defined regular expressions
-        candidate_name_match = re.search(candidate_name_pattern, text_data)
+        candidate_name_match = re.search(
+            candidate_name_pattern, text_data)
         candidate_name = candidate_name_match.group(
             1).strip() if candidate_name_match else None
 
         birth_date_match = re.search(birth_date_pattern, text_data)
         birth_date = birth_date_match.group(
             1).strip() if birth_date_match else None
+
+        gender_match = re.search(gender_pattern, text_data)
+        gender = gender_match.group(1).strip() if gender_match else None
+
+        education_match = re.search(education_pattern, text_data)
+        education = education_match.group(
+            1).strip() if education_match else None
+
+        university_match = re.search(university_pattern, text_data)
+        university = university_match.group(
+            1).strip() if university_match else None
+
+        total_experience_match = re.search(experience_pattern, text_data)
+        total_experience = total_experience_match.group(
+            1).strip() if total_experience_match else None
+
+        state_match = re.search(state_pattern, text_data)
+        state = state_match.group(1).strip() if state_match else None
+
+        technology_match = re.search(technology_pattern, text_data)
+        technology = technology_match.group(
+            1).strip() if technology_match else None
+
+        end_client_match = re.search(end_client_pattern, text_data)
+        end_client = end_client_match.group(
+            1).strip() if end_client_match else None
 
         # Extract other fields similarly...
 
