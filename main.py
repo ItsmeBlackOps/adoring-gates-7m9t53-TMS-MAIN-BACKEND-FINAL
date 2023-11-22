@@ -59,17 +59,17 @@ def store_data_in_database(data_dict):
 
         # Creating a cursor object using the cursor() method
         cursor = conn.cursor()
-
+        print(cursor)
         # Generate the placeholders dynamically for the insertion query
         fields = ', '.join(data_dict.keys())
         placeholders = ', '.join(['%s'] * len(data_dict))
 
         # Construct the dynamic insertion query
-        insert_query = f"INSERT INTO your_table_name ({fields}) VALUES ({placeholders})"
+        insert_query = f"INSERT INTO email_table ({fields}) VALUES ({placeholders})"
 
         # Extract the values from the data dictionary and convert them to a tuple
         values = tuple(data_dict.values())
-
+        print(values)
         # Execute the dynamic insert query with parameterized values
         cursor.execute(insert_query, values)
 
@@ -88,28 +88,39 @@ def store_data_in_database(data_dict):
 @app.route('/process_data', methods=['POST'])
 def process_data():
     try:
-        # Get the JSON data sent from Power Automate
-        data = request.json
+        # Get the text data sent from the client
+        text_data = request.data.decode('utf-8')
 
-        if not data:
+        if not text_data:
             return jsonify({"error": "No data provided"}), 400
 
+        # Define regular expressions for each field
+        # Replace these with your actual regular expressions
+        candidate_name_pattern = r"Candidate Name:\s*(.*?)\s*Birth date:"
+        birth_date_pattern = r"Birth date:\s*(.*?)\s*Gender:"
+        gender_pattern = r"Gender:\s*(.*?)\s*Education:"
+        education_pattern = r"Education:\s*(.*?)\s*University:"
+        university_pattern = r"University:\s*(.*?)\s*Total Experience in Years:"
+        experience_pattern = r"Total Experience in Years:\s*(.*?)\s*State:"
+        state_pattern = r"State:\s*(.*?)\s*Technology:"
+        technology_pattern = r"Technology:\s*(.*?)\s*End Client:"
+        end_client_pattern = r"End Client:\s*(.*?)\s*Interview Round"
+        interview_round_pattern = r"Interview Round 1st 2nd 3rd or Final round\s*(.*?)\s*Job Title"
+        job_title_pattern = r"Job Title in JD:\s*(.*?)\s*Email ID:"
+        email_pattern = r"Email ID:\s*(.*?)\s*Personal Contact Number:"
+        contact_number_pattern = r"Personal Contact Number:\s*(.*?)\s*Data and Time of Interview \(Mention time zone\):"
+        duration_pattern = r"Duration (\d+\s*\w+)"
+
         # Extract information using the defined regular expressions
-        candidate_name = data.get("candidate_name")
-        birth_date = data.get("birth_date")
-        gender = data.get("gender")
-        education = data.get("education")
-        university = data.get("university")
-        total_experience = data.get("total_experience")
-        state = data.get("state_name")
-        technology = data.get("technology")
-        end_client = data.get("end_client")
-        interview_round = data.get("interview_round")
-        job_title = data.get("job_title")
-        email_address = data.get("email_id")
-        contact_number = data.get("contact_number")
-        date_time = extract_date_time(data.get("normalized_text"))
-        duration = data.get("duration")
+        candidate_name_match = re.search(candidate_name_pattern, text_data)
+        candidate_name = candidate_name_match.group(
+            1).strip() if candidate_name_match else None
+
+        birth_date_match = re.search(birth_date_pattern, text_data)
+        birth_date = birth_date_match.group(
+            1).strip() if birth_date_match else None
+
+        # Extract other fields similarly...
 
         # Create a dictionary with the extracted data
         data_dict = {
@@ -124,12 +135,11 @@ def process_data():
             "end_client": end_client,
             "interview_round": interview_round,
             "job_title": job_title,
-            "email_id": email_address,
+            "email_id": email_id,
             "contact_number": contact_number,
-            "date_time_of_interview": date_time,
             "duration": duration,
         }
-
+        print(data_dict)
         # Store the data in a database
         success = store_data_in_database(data_dict)
 
@@ -138,7 +148,8 @@ def process_data():
         else:
             return jsonify({"error": "Failed to store data in the database"}), 500
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        print("Error:", str(e))
+        return str(e)
 
 
 if __name__ == '__main__':
