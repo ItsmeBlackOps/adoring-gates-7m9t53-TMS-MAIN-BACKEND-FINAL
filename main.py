@@ -6,9 +6,7 @@ import pytz
 from dateutil import parser as date_parser
 import json
 import psycopg2
-import pandas as pd
 import warnings
-import re
 warnings.filterwarnings("ignore")
 
 app = Flask(__name__)
@@ -150,6 +148,30 @@ def process_data():
         end_client = end_client_match.group(
             1).strip() if end_client_match else None
 
+        interview_round_match = re.search(
+            interview_round_pattern, text_data)
+        interview_round = interview_round_match.group(
+            1).strip() if interview_round_match else None
+        print(interview_round_pattern)
+        job_title_match = re.search(job_title_pattern, text_data)
+        job_title = job_title_match.group(
+            1).strip() if job_title_match else None
+        pattern = r'(\S+@\S+) \[(.*?)\]'
+
+        email_match = re.search(email_pattern, text_data)
+        email_id = email_match.group(1).strip() if email_match else None
+        match = re.match(pattern, email_id)
+        if match:
+            email_address = match.group(1)
+
+        contact_number_match = re.search(
+            contact_number_pattern, text_data)
+        contact_number = contact_number_match.group(
+            1).strip() if contact_number_match else None
+
+        duration_match = re.search(duration_pattern, text_data)
+        duration = duration_match.group(1) if duration_match else None
+
         # Extract other fields similarly...
 
         # Create a dictionary with the extracted data
@@ -180,7 +202,6 @@ def process_data():
     except Exception as e:
         print("Error:", str(e))
         return str(e)
-
 
 if __name__ == '__main__':
     app.run(debug=True)
