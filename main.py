@@ -1,4 +1,5 @@
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 import re
 from datetime import datetime
 import pytz
@@ -12,7 +13,7 @@ warnings.filterwarnings("ignore")
 
 app = Flask(__name__)
 
-
+CORS(app)
 def extract_date_time(normalized_text):
     # Define a pattern to extract the time zone
     timezone_pattern = r"\((.*?)\)"
@@ -93,7 +94,7 @@ def process_data():
 
         if not text_data:
             return jsonify({"error": "No data provided"}), 400
-
+        print(text_data)
         # Define regular expressions for each field
         # Replace these with your actual regular expressions
         candidate_name_pattern = r"Candidate Name:\s*(.*?)\s*Birth date:"

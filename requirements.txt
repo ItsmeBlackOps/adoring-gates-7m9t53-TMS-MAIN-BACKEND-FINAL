@@ -5,3 +5,4 @@ python-dateutil
 psycopg2
 pandas
 flask
+flask_cors
