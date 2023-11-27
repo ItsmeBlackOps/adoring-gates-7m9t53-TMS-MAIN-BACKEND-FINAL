@@ -1,15 +1,16 @@
+import warnings
+import psycopg2
+from dateutil import parser as date_parser
+import pytz
 from flask import Flask, request, jsonify
+from prometheus_flask_exporter import PrometheusMetrics
 from flask_cors import CORS
 import re
-from datetime import datetime
-import pytz
-from dateutil import parser as date_parser
-import json
-import psycopg2
-import warnings
+
 warnings.filterwarnings("ignore")
 
 app = Flask(__name__)
+metrics = PrometheusMetrics(app)
 
 CORS(app)
 
@@ -87,6 +88,10 @@ def store_data_in_database(data_dict):
 
 
 @app.route('/process_data', methods=['POST'])
+@metrics.counter(
+    'process_data_request_count', 'Number of requests to /process_data')
+@metrics.histogram(
+    'process_data_request_latency_seconds', 'Request latency for /process_data')
 def process_data():
     try:
         # Get the text data sent from the client
@@ -169,8 +174,14 @@ def process_data():
         contact_number = contact_number_match.group(
             1).strip() if contact_number_match else None
 
+        duration_pattern = r"Duration\s*([\d.]+\s*\w+)"
+        subject_pattern = r"Subject:(.*)"
+
         duration_match = re.search(duration_pattern, text_data)
+        subject_match = re.search(subject_pattern, text_data)
+
         duration = duration_match.group(1) if duration_match else None
+        subject = subject_match.group(1).strip() if subject_match else None
 
         # Extract other fields similarly...
 
@@ -190,6 +201,7 @@ def process_data():
             "email_id": email_id,
             "contact_number": contact_number,
             "duration": duration,
+            "subject": subject,
         }
         print(data_dict)
         # Store the data in a database
@@ -202,6 +214,7 @@ def process_data():
     except Exception as e:
         print("Error:", str(e))
         return str(e)
+
 
 if __name__ == '__main__':
     app.run(debug=True)
