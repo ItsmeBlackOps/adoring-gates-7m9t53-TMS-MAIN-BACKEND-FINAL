@@ -88,10 +88,6 @@ def store_data_in_database(data_dict):
 
 
 @app.route('/process_data', methods=['POST'])
-@metrics.counter(
-    'process_data_request_count', 'Number of requests to /process_data')
-@metrics.histogram(
-    'process_data_request_latency_seconds', 'Request latency for /process_data')
 def process_data():
     try:
         # Get the text data sent from the client
@@ -208,7 +204,7 @@ def process_data():
         success = store_data_in_database(data_dict)
 
         if success:
-            return jsonify({"message": "Data received and stored successfully"}), 200
+            return jsonify(data_dict), 200
         else:
             return jsonify({"error": "Failed to store data in the database"}), 500
     except Exception as e:
