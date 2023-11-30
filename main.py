@@ -6,6 +6,7 @@ from flask import Flask, request, jsonify
 from prometheus_flask_exporter import PrometheusMetrics
 from flask_cors import CORS
 import re
+from fuzzywuzzy import process
 
 warnings.filterwarnings("ignore")
 
@@ -43,6 +44,38 @@ def extract_date_time(text_data):
         date_time = None
 
     return date_time
+
+
+def extract_candidate_details(text_data):
+    details = {}
+
+    # Patterns for extracting each detail
+    patterns = {
+        "Candidate Name": r"Candidate Name:\s*(.*)",
+        "Birth date": r"Birth date:\s*(.*)",
+        "Gender": r"Gender:\s*(.*)",
+        "Education": r"Education:\s*(.*)",
+        "University": r"University:\s*(.*)",
+        "Total Experience in Years": r"Total Experience in Years:\s*(.*)",
+        "State": r"State:\s*(.*)",
+        "Technology": r"Technology:\s*(.*)",
+        "End Client": r"End Client:\s*(.*)",
+        "Interview Round": r"Interview Round 1st 2nd  3rd  or Final round:\s*(.*)",
+        "Job Title in JD": r"Job Title in JD:\s*(.*)",
+        "Email ID": r"Email ID:\s*(.*)",
+        "Contact Number": r"Personal Contact Number:\s*(.*)",
+        "Date and Time of Interview": r"Date and Time of Interview \(Mention time zone\):\s*(.*)",
+        "Duration": r"Duration:\s*(.*)",
+        "Previous Support by/Preferred by Candidate": r"Previous Support by/Preferred by Candidate:\s*(.*)",
+        "Subject": r"Subject:\s*(.*)"
+    }
+
+    # Extracting each detail using the corresponding pattern
+    for key, pattern in patterns.items():
+        match = re.search(pattern, text_data)
+        if match:
+            details[key] = match.group(1).strip()
+    return details
 
 
 def store_data_in_database(data_dict):
@@ -95,111 +128,17 @@ def process_data():
 
         if not text_data:
             return jsonify({"error": "No data provided"}), 400
-        print(text_data)
-        # Define regular expressions for each field
-        # Replace these with your actual regular expressions
-        candidate_name_pattern = r"Candidate Name:\s*(.*?)\s*Birth date:"
-        birth_date_pattern = r"Birth date:\s*(.*?)\s*Gender:"
-        gender_pattern = r"Gender:\s*(.*?)\s*Education:"
-        education_pattern = r"Education:\s*(.*?)\s*University:"
-        university_pattern = r"University:\s*(.*?)\s*Total Experience in Years:"
-        experience_pattern = r"Total Experience in Years:\s*(.*?)\s*State:"
-        state_pattern = r"State:\s*(.*?)\s*Technology:"
-        technology_pattern = r"Technology:\s*(.*?)\s*End Client:"
-        end_client_pattern = r"End Client:\s*(.*?)\s*Interview Round"
-        interview_round_pattern = r"Interview Round 1st 2nd 3rd or Final round\s*(.*?)\s*Job Title"
-        job_title_pattern = r"Job Title in JD:\s*(.*?)\s*Email ID:"
-        email_pattern = r"Email ID:\s*(.*?)\s*Personal Contact Number:"
-        contact_number_pattern = r"Personal Contact Number:\s*(.*?)\s*Data and Time of Interview \(Mention time zone\):"
-        duration_pattern = r"Duration (\d+\s*\w+)"
 
-        # Extract information using the defined regular expressions
-        candidate_name_match = re.search(
-            candidate_name_pattern, text_data)
-        candidate_name = candidate_name_match.group(
-            1).strip() if candidate_name_match else None
+        # Extract candidate details using the new function
+        data_dict = extract_candidate_details(text_data)
 
-        birth_date_match = re.search(birth_date_pattern, text_data)
-        birth_date = birth_date_match.group(
-            1).strip() if birth_date_match else None
+        # Check if date and time are included and process them
+        if 'Date and Time of Interview' in data_dict:
+            date_time = extract_date_time(
+                data_dict['Date and Time of Interview'])
+            if date_time:
+                data_dict['Date and Time of Interview'] = date_time
 
-        gender_match = re.search(gender_pattern, text_data)
-        gender = gender_match.group(1).strip() if gender_match else None
-
-        education_match = re.search(education_pattern, text_data)
-        education = education_match.group(
-            1).strip() if education_match else None
-
-        university_match = re.search(university_pattern, text_data)
-        university = university_match.group(
-            1).strip() if university_match else None
-
-        total_experience_match = re.search(experience_pattern, text_data)
-        total_experience = total_experience_match.group(
-            1).strip() if total_experience_match else None
-
-        state_match = re.search(state_pattern, text_data)
-        state = state_match.group(1).strip() if state_match else None
-
-        technology_match = re.search(technology_pattern, text_data)
-        technology = technology_match.group(
-            1).strip() if technology_match else None
-
-        end_client_match = re.search(end_client_pattern, text_data)
-        end_client = end_client_match.group(
-            1).strip() if end_client_match else None
-
-        interview_round_match = re.search(
-            interview_round_pattern, text_data)
-        interview_round = interview_round_match.group(
-            1).strip() if interview_round_match else None
-        print(interview_round_pattern)
-        job_title_match = re.search(job_title_pattern, text_data)
-        job_title = job_title_match.group(
-            1).strip() if job_title_match else None
-        pattern = r'(\S+@\S+) \[(.*?)\]'
-
-        email_match = re.search(email_pattern, text_data)
-        email_id = email_match.group(1).strip() if email_match else None
-        match = re.match(pattern, email_id)
-        if match:
-            email_address = match.group(1)
-
-        contact_number_match = re.search(
-            contact_number_pattern, text_data)
-        contact_number = contact_number_match.group(
-            1).strip() if contact_number_match else None
-
-        duration_pattern = r"Duration\s*([\d.]+\s*\w+)"
-        subject_pattern = r"Subject:(.*)"
-
-        duration_match = re.search(duration_pattern, text_data)
-        subject_match = re.search(subject_pattern, text_data)
-
-        duration = duration_match.group(1) if duration_match else None
-        subject = subject_match.group(1).strip() if subject_match else None
-
-        # Extract other fields similarly...
-
-        # Create a dictionary with the extracted data
-        data_dict = {
-            "candidate_name": candidate_name,
-            "birth_date": birth_date,
-            "gender": gender,
-            "education": education,
-            "university": university,
-            "total_experience": total_experience,
-            "state_name": state,
-            "technology": technology,
-            "end_client": end_client,
-            "interview_round": interview_round,
-            "job_title": job_title,
-            "email_id": email_id,
-            "contact_number": contact_number,
-            "duration": duration,
-            "subject": subject,
-        }
-        print(data_dict)
         # Store the data in a database
         success = store_data_in_database(data_dict)
 
