@@ -3,18 +3,19 @@ import psycopg2
 from dateutil import parser as date_parser
 import pytz
 from flask import Flask, request, jsonify
-from prometheus_flask_exporter import PrometheusMetrics
 from flask_cors import CORS
 import re
 from fuzzywuzzy import process
 from psycopg2 import sql
 from psycopg2.extras import execute_values
+from loguru import logger
 
 
 warnings.filterwarnings("ignore")
 
 app = Flask(__name__)
 CORS(app)
+logger.debug("Received data: %s", text_data)
 
 
 def extract_date_time(text_data):
@@ -116,22 +117,17 @@ def get_task_type_id(cursor, task_type_name):
     return result[0] if result else None
 
 
-def get_gender_id(cursor, gender_name, all_genders):
+def get_gender_id(cursor, gender_name):
     cursor.execute("SELECT gender_id, gender_name FROM gender;")
     genders = cursor.fetchall()
 
-    # If exact match not found, use fuzzy matching to find the closest one
     if not genders:
         return None
 
-    # Create a dictionary for gender_name to gender_id mapping
     gender_dict = {name: g_id for g_id, name in genders}
-    all_genders = list(gender_dict.keys())
-
-    # Use fuzzy matching to find the closest gender name
     closest_match = process.extractOne(
-        gender_name, [g[1] for g in genders], score_cutoff=80)
-    return closest_match[2] if closest_match else None
+        gender_name, gender_dict.keys(), score_cutoff=80)
+    return gender_dict.get(closest_match[0]) if closest_match else 1
 
 
 def get_state_id(cursor, state_name):
@@ -184,6 +180,9 @@ def enter_data_into_db(extracted_data):
             # Insert or retrieve candidate_id
             gender_id = get_gender_id(cursor, extracted_data['Gender'])
             state_id = get_state_id(cursor, extracted_data['State'])
+            if gender_id is None or state_id is None:
+                raise ValueError("Gender or State not found.")
+
             candidate_id = get_or_create_candidate(
                 cursor, extracted_data, gender_id, state_id)
 
@@ -222,7 +221,7 @@ def process_data():
     try:
         # Get the text data sent from the client
         text_data = request.data.decode('utf-8')
-
+        print(text_data)
         if not text_data:
             return jsonify({"error": "No data provided"}), 400
 
@@ -239,7 +238,8 @@ def process_data():
         # Get task type ID based on subject
         subject = data_dict.get("Subject")
         # This should come from your actual task type list
-        task_types = ["List", "Of", "Task", "Types"]
+        task_types = ['Resume Understanding', 'Resume Making/Reviewing',
+                      'Technical Support', 'Assessment', 'Job Support', 'Training', 'Mock Interviews']
         task_type = find_closest_match(subject, task_types)
 
         if task_type:
@@ -255,8 +255,11 @@ def process_data():
                         insert_into_main(cursor, candidate_id,
                                          task_type_id, user_id, data_dict)
                         conn.commit()  # Commit the transaction
+                        logger.info("Database operation successful")
                     except Exception as e:
-                        conn.rollback()  # Rollback the transaction on error
+                        conn.rollback()
+                        # Rollback the transaction on error
+                        logger.error("Database operation failed: %s", e)
                         raise
 
             return jsonify(data_dict), 200

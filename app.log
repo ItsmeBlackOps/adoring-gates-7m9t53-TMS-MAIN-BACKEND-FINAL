@@ -1,0 +1,7 @@
+WARNING:werkzeug: * Debugger is active!
+INFO:werkzeug: * Debugger PIN: 391-524-968
+INFO:werkzeug:127.0.0.1 - - [30/Nov/2023 18:52:39] "[35m[1mPOST /process_data HTTP/1.1[0m" 500 -
+INFO:werkzeug: * Detected change in '/workspace/main.py', reloading
+WARNING:werkzeug: * Debugger is active!
+INFO:werkzeug: * Debugger PIN: 391-524-968
+INFO:werkzeug: * Detected change in '/workspace/main.py', reloading
