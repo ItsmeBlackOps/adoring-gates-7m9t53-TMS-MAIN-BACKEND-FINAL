@@ -22,7 +22,7 @@ def add_log_message(message):
     log_messages.append(message)
 
 
-@ app.route('/log', methods=['GET'])
+@ app.route('/', methods=['GET'])
 def get_logs():
     # Return all log messages as a JSON response
     return jsonify(log_messages)
@@ -46,7 +46,7 @@ def extract_candidate_details(text_data):
         "Job Title in JD": r"Job Title in JD:\s*(.*)",
         "Email ID": r"Email ID:\s*(.*)",
         "Contact Number": r"Personal Contact Number:\s*(.*)",
-        "Date and Time of Interview": r"Date and Time of Interview \(Mention time zone\):\s*(.*)",
+        "Date and Time of Interview": r"Date and Time of Interview \(Mention time zone\):\s*(.*)|Date of Interview \(Mention time zone\):\s*(.*)",
         "Duration": r"Duration:\s*(.*)",
         "Previous Support by/Preferred by Candidate": r"Previous Support by/Preferred by Candidate:\s*(.*)",
         "Subject": r"Subject:\s*(.*)"
@@ -158,34 +158,26 @@ def get_gender_id(cursor, gender_name):
 
 def get_state_id(cursor, state_name):
     try:
-        add_log_message(state_name)
-        # Query to retrieve state_id and acronym from the 'state' table
-        cursor.execute("SELECT state_id, acronym FROM state;")
+        add_log_message(f"Searching for State: {state_name}")
+        # Query to retrieve state_id, acronym, and state_name from the 'state' table
+        cursor.execute("SELECT state_id, acronym, state_name FROM state;")
         states = cursor.fetchall()
-        # If no states found, return None
+
+        # Check if no states are found
         if not states:
+            add_log_message("No states found in the database.")
             return None
 
-        # Check if the input state_name is an acronym
-        if state_name in [state[1] for state in states]:
-            # If the state_name is an acronym, find the corresponding state_id
-            state_id = [state[0]
-                        for state in states if state[1] == state_name][0]
-            add_log_message(f"State Name (Acronym): {state_name}")
-            add_log_message(f"Matching State ID: {state_id}")
-            return state_id
+        # Check if the input state_name is an acronym or state_name
+        matching_states = [state for state in states if state_name.lower(
+        ) in state[1].lower() or state_name.lower() in state[2].lower()]
 
-        # Fuzzy matching to find the closest state name based on the 'acronym' column
-        closest_match = process.extractOne(
-            state_name, [s[1] for s in states], score_cutoff=80)
-
-        # Check if closest_match is None
-        if closest_match is None:
+        if not matching_states:
             add_log_message(f"No match found for state name: {state_name}")
             return None
 
         # Extract the matching state ID
-        state_id = closest_match[2]
+        state_id = matching_states[0][0]
 
         # Print the state name and matching state ID for debugging
         add_log_message(f"State Name: {state_name}")
@@ -193,9 +185,6 @@ def get_state_id(cursor, state_name):
 
         return state_id
 
-    except IndexError as e:
-        add_log_message(f"IndexError: {e}")
-        return None
     except Exception as e:
         add_log_message(f"Error: {str(e)}")
         return None
@@ -260,25 +249,39 @@ def enter_data_into_db(extracted_data, task_type, user_id):
                 # Get or create the company and get its company_id
                 company_id = get_or_create_company(cursor, end_client)
 
-                # Insert into the main table with the associated company_id
-                cursor.execute("""
-                    INSERT INTO main (candidate_id, task_type_id, user_id, job_title, interview_round, date_time_timezone, duration_in_hours, company_id)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s);
-                """, (
-                    candidate_id,
-                    task_type_id,
-                    user_id,
-                    extracted_data['Job Title in JD'],
-                    # Store as a text field or None if not available
-                    extracted_data.get('Interview Round', None),
-                    extracted_data['Date and Time of Interview'],
-                    extracted_data['Duration'],
-                    company_id  # Pass the company_id
-                ))
+                try:
+                    # Insert into the main table with the associated company_id
+                    cursor.execute("""
+                        INSERT INTO main (candidate_id, task_type_id, user_id, job_title, interview_round, date_time_timezone, duration_in_hours, company_id)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s);
+                    """, (
+                        candidate_id,
+                        task_type_id,
+                        user_id,
+                        extracted_data['Job Title in JD'],
+                        # Store as a text field or None if not available
+                        extracted_data.get('Interview Round', None),
+                        extracted_data['Date and Time of Interview'],
+                        extracted_data['Duration'],
+                        company_id  # Pass the company_id
+                    ))
+                    add_log_message("Database operation successful")
+                except Exception as e:
+                    # Log the error if the database operation fails
+                    error_message = f"Database operation failed: {e}"
+                    add_log_message(error_message)
+                    conn.rollback()  # Rollback the transaction in case of failure
             else:
                 # Insert into the main table without the company_id
-                insert_into_main(cursor, candidate_id,
-                                 task_type_id, user_id, extracted_data)
+                try:
+                    insert_into_main(cursor, candidate_id,
+                                     task_type_id, user_id, extracted_data)
+                    add_log_message("Database operation successful")
+                except Exception as e:
+                    # Log the error if the database operation fails
+                    error_message = f"Database operation failed: {e}"
+                    add_log_message(error_message)
+                    conn.rollback()  # Rollback the transaction in case of failure
 
             # Commit the transaction
             conn.commit()
@@ -328,40 +331,37 @@ def process_data():
                       'Technical Support', 'Assessment', 'Job Support', 'Training', 'Mock Interviews']
         task_type = find_closest_match(subject, task_types)
         add_log_message(f"task_type: {task_type}")  # Add log message
+
+        # Initialize user_id to None
         user_id = None
-        if task_type:
-            try:
-                # Check if there is a value in "Previous Support by/Preferred by Candidate"
-                preferred_by_candidate = data_dict.get(
-                    'Previous Support by/Preferred by Candidate')
 
-                if preferred_by_candidate:
-                    # Fetch user_id based on the candidate's preference
-                    with psycopg2.connect(**db_credentials) as conn:
-                        with conn.cursor() as cursor:
-                            user_id = get_user_id_by_preference(
-                                cursor, preferred_by_candidate)
-                            if user_id:
-                                add_log_message(
-                                    f"User ID based on candidate preference: {user_id}")
-                            else:
-                                add_log_message(
-                                    "User not found based on candidate preference.")
+        try:
+            # Check if there is a value in "Previous Support by/Preferred by Candidate"
+            preferred_by_candidate = data_dict.get(
+                'Previous Support by/Preferred by Candidate')
 
-                # Enter the data into the database using the function
-                enter_data_into_db(data_dict, task_type, user_id)
-                add_log_message("Database operation successful")
-                return jsonify(data_dict), 200
-            except Exception as e:
-                # Log the error
-                error_message = f"Database operation failed: {e}"
-                add_log_message(error_message)
-                return jsonify({"error": "Database operation failed"}), 500
-        else:
+            if preferred_by_candidate:
+                # Fetch user_id based on the candidate's preference
+                with psycopg2.connect(**db_credentials) as conn:
+                    with conn.cursor() as cursor:
+                        user_id = get_user_id_by_preference(
+                            cursor, preferred_by_candidate)
+                        if user_id:
+                            add_log_message(
+                                f"User ID based on candidate preference: {user_id}")
+                        else:
+                            add_log_message(
+                                "User not found based on candidate preference.")
+
+            # Enter the data into the database using the function
+            enter_data_into_db(data_dict, task_type, user_id)
+            add_log_message("Database operation successful")
+            return jsonify(data_dict), 200
+        except Exception as e:
             # Log the error
-            error_message = "Failed to determine the task type."
+            error_message = f"Database operation failed: {e}"
             add_log_message(error_message)
-            return jsonify({"error": error_message}), 400
+            return jsonify({"error": "Database operation failed"}), 500
 
     except Exception as e:
         # Log the error
