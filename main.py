@@ -340,16 +340,39 @@ def process_data():
                 logger.info("Database operation successful")
                 return jsonify(data_dict), 200
             except Exception as e:
-                # Handle database operation error
-                logger.error(f"Database operation failed: {e}")
+                # Log the error and add it to the error DataFrame
+                error_message = f"Database operation failed: {e}"
+                logger.error(error_message)
+                error_df = error_df.append(
+                    {"Timestamp": datetime.now(), "Error Message": error_message}, ignore_index=True)
                 return jsonify({"error": "Database operation failed"}), 500
         else:
-            return jsonify({"error": "Failed to determine the task type."}), 400
+            # Log the error and add it to the error DataFrame
+            error_message = "Failed to determine the task type."
+            logger.error(error_message)
+            error_df = error_df.append(
+                {"Timestamp": datetime.now(), "Error Message": error_message}, ignore_index=True)
+            return jsonify({"error": error_message}), 400
 
     except Exception as e:
-        # Log the error here
-        logger.error(f"An error occurred while processing the data: {e}")
+        # Log the error here and add it to the error DataFrame
+        error_message = f"An error occurred while processing the data: {e}"
+        logger.error(error_message)
+        error_df = error_df.append(
+            {"Timestamp": datetime.now(), "Error Message": error_message}, ignore_index=True)
         return jsonify({"error": "An error occurred while processing the data."}), 500
+
+# Define a route to export the error DataFrame to a CSV file
+
+
+@ app.route('/export_errors', methods=['GET'])
+def export_errors():
+    if not error_df.empty:
+        # Export the error DataFrame to a CSV file
+        error_df.to_csv("error_log.csv", index=False)
+        return jsonify({"message": "Error log exported successfully."}), 200
+    else:
+        return jsonify({"message": "No errors to export."}), 200
 
 
 if __name__ == '__main__':

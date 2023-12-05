@@ -1,13 +1,19 @@
 {
   "setupTasks": [
     {
-      "name": "pip install -r requirements.txt",
-      "command": "pip install -r requirements.txt"
+      "name": "Install Python Dependencies",
+      "command": "pip install -r requirements.txt",
+      "type": "shell"
+    },
+    {
+      "name": "Download spaCy Model",
+      "command": "python -m spacy download en_core_web_sm",
+      "type": "shell"
     }
   ],
   "tasks": {
     "start": {
-      "name": "start",
+      "name": "Start Python Application",
       "command": "python main.py",
       "runAtStart": true,
       "preview": {

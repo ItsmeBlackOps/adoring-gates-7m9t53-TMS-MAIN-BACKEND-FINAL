@@ -10,4 +10,4 @@ prometheus-flask-exporter
 fuzzywuzzy
 python-Levenshtein
 loguru
-spacy==3.7.2 en_core_web_sm
+spacy
