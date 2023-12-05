@@ -11,3 +11,4 @@ fuzzywuzzy
 python-Levenshtein
 loguru
 spacy
+en_core_web_sm

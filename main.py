@@ -6,6 +6,7 @@ import re
 from fuzzywuzzy import process
 from loguru import logger
 import spacy
+
 nlp = spacy.load("en_core_web_sm")
 
 
@@ -29,7 +30,7 @@ def extract_candidate_details(text_data):
         "State": r"State:\s*(.*)",
         "Technology": r"Technology:\s*(.*)",
         "End Client": r"End Client:\s*(.*)",
-        "Interview Round": r"Interview Round 1st 2nd  3rd  or Final round:\s*(.*)",
+        "Interview Round": r"Interview Round 1st 2nd  3rd  or Final round:\s*(.*)",
         "Job Title in JD": r"Job Title in JD:\s*(.*)",
         "Email ID": r"Email ID:\s*(.*)",
         "Contact Number": r"Personal Contact Number:\s*(.*)",
@@ -45,6 +46,22 @@ def extract_candidate_details(text_data):
         if match:
             details[key] = match.group(1).strip()
     return details
+
+
+def get_or_create_company(cursor, company_name):
+    # Check if the company with the given name already exists
+    cursor.execute(
+        "SELECT company_id FROM companies WHERE company_name = %s;", (company_name,))
+    result = cursor.fetchone()
+
+    if result:
+        return result[0]  # Return company_id if the company already exists
+    else:
+        # If the company doesn't exist, insert it and return the new company_id
+        cursor.execute(
+            "INSERT INTO companies (company_name) VALUES (%s) RETURNING company_id;", (company_name,))
+        new_company_id = cursor.fetchone()[0]
+        return new_company_id
 
 
 def get_or_create_candidate(cursor, data, gender_id, state_id):
@@ -63,13 +80,13 @@ def get_or_create_candidate(cursor, data, gender_id, state_id):
     INSERT INTO candidates (candidate_name, candidate_phone, candidate_email, gender_id, age, education, university, technology, total_experience_year, state_id)
     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     ON CONFLICT (candidate_email) DO UPDATE SET
-    candidate_phone  =  EXCLUDED.candidate_phone,
-    age  =  EXCLUDED.age,
-    education  =  EXCLUDED.education,
-    university  =  EXCLUDED.university,
-    technology  =  EXCLUDED.technology,
-    total_experience_year  =  EXCLUDED.total_experience_year,
-    state_id  =  EXCLUDED.state_id
+    candidate_phone = EXCLUDED.candidate_phone,
+    age = EXCLUDED.age,
+    education = EXCLUDED.education,
+    university = EXCLUDED.university,
+    technology = EXCLUDED.technology,
+    total_experience_year = EXCLUDED.total_experience_year,
+    state_id = EXCLUDED.state_id
     RETURNING candidate_id;
 """, (
         data['Candidate Name'],
@@ -105,7 +122,7 @@ def extract_numeric_years(experience_str):
 
 def get_task_type_id(cursor, task_type_name):
     cursor.execute(
-        "SELECT task_type_id FROM task_type WHERE task_type_name  =  %s;", (task_type_name,))
+        "SELECT task_type_id FROM task_type WHERE task_type_name = %s;", (task_type_name,))
     result = cursor.fetchone()
     return result[0] if result else None
 
@@ -177,7 +194,7 @@ def get_user_id_by_preference(cursor, preference):
     # Modify this function according to your database schema and logic.
     # For demonstration, let's assume you have a table 'users' with 'user_id' and 'name' columns
     cursor.execute(
-        "SELECT user_id FROM users WHERE user_name  =  %s;", (preference,))
+        "SELECT user_id FROM users WHERE user_name = %s;", (preference,))
     result = cursor.fetchone()
     return result[0] if result else None
 
@@ -224,9 +241,32 @@ def enter_data_into_db(extracted_data, task_type, user_id):
             # Get task_type_id based on the subject
             task_type_id = get_task_type_id(cursor, task_type)
 
-            # Insert into the main table
-            insert_into_main(cursor, candidate_id,
-                             task_type_id, user_id, extracted_data)
+            # Check if there is an "End Client" in the extracted data
+            end_client = extracted_data.get('End Client')
+
+            if end_client:
+                # Get or create the company and get its company_id
+                company_id = get_or_create_company(cursor, end_client)
+
+                # Insert into the main table with the associated company_id
+                cursor.execute("""
+                    INSERT INTO main (candidate_id, task_type_id, user_id, job_title, interview_round, date_time_timezone, duration_in_hours, company_id)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s);
+                """, (
+                    candidate_id,
+                    task_type_id,
+                    user_id,
+                    extracted_data['Job Title in JD'],
+                    # Store as a text field or None if not available
+                    extracted_data.get('Interview Round', None),
+                    extracted_data['Date and Time of Interview'],
+                    extracted_data['Duration'],
+                    company_id  # Pass the company_id
+                ))
+            else:
+                # Insert into the main table without the company_id
+                insert_into_main(cursor, candidate_id,
+                                 task_type_id, user_id, extracted_data)
 
             # Commit the transaction
             conn.commit()
@@ -244,8 +284,6 @@ db_credentials = {
     "password": "vizvacons123",
     "host": "tmsdb.cnqltqgk9yzu.us-east-1.rds.amazonaws.com",
     "port": "5432"
-
-
 }
 
 
@@ -277,7 +315,7 @@ def process_data():
                       'Technical Support', 'Assessment', 'Job Support', 'Training', 'Mock Interviews']
         task_type = find_closest_match(subject, task_types)
         print("task_type", task_type)
-
+        user_id = None
         if task_type:
             try:
                 # Check if there is a value in "Previous Support by/Preferred by Candidate"
