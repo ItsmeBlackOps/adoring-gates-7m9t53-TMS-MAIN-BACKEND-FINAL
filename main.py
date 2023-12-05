@@ -15,6 +15,18 @@ warnings.filterwarnings("ignore")
 app = Flask(__name__)
 CORS(app)
 
+log_messages = []
+
+
+def add_log_message(message):
+    log_messages.append(message)
+
+
+@ app.route('/log', methods=['GET'])
+def get_logs():
+    # Return all log messages as a JSON response
+    return jsonify(log_messages)
+
 
 def extract_candidate_details(text_data):
     details = {}
@@ -30,7 +42,7 @@ def extract_candidate_details(text_data):
         "State": r"State:\s*(.*)",
         "Technology": r"Technology:\s*(.*)",
         "End Client": r"End Client:\s*(.*)",
-        "Interview Round": r"Interview Round 1st 2nd  3rd  or Final round:\s*(.*)",
+        "Interview Round": r"Interview Round 1st 2nd 3rd or Final round:\s*(.*)",
         "Job Title in JD": r"Job Title in JD:\s*(.*)",
         "Email ID": r"Email ID:\s*(.*)",
         "Contact Number": r"Personal Contact Number:\s*(.*)",
@@ -139,14 +151,14 @@ def get_gender_id(cursor, gender_name):
         gender_name, gender_dict.keys(), score_cutoff=80)
     gender_id = gender_dict.get(closest_match[0]) if closest_match else 1
 
-    print(f"Gender Name: {gender_name}")
-    print(f"Matching Gender ID: {gender_id}")
+    add_log_message(f"Gender Name: {gender_name}")
+    add_log_message(f"Matching Gender ID: {gender_id}")
     return gender_id
 
 
 def get_state_id(cursor, state_name):
     try:
-        print(state_name)
+        add_log_message(state_name)
         # Query to retrieve state_id and acronym from the 'state' table
         cursor.execute("SELECT state_id, acronym FROM state;")
         states = cursor.fetchall()
@@ -159,8 +171,8 @@ def get_state_id(cursor, state_name):
             # If the state_name is an acronym, find the corresponding state_id
             state_id = [state[0]
                         for state in states if state[1] == state_name][0]
-            print(f"State Name (Acronym): {state_name}")
-            print(f"Matching State ID: {state_id}")
+            add_log_message(f"State Name (Acronym): {state_name}")
+            add_log_message(f"Matching State ID: {state_id}")
             return state_id
 
         # Fuzzy matching to find the closest state name based on the 'acronym' column
@@ -169,23 +181,23 @@ def get_state_id(cursor, state_name):
 
         # Check if closest_match is None
         if closest_match is None:
-            print(f"No match found for state name: {state_name}")
+            add_log_message(f"No match found for state name: {state_name}")
             return None
 
         # Extract the matching state ID
         state_id = closest_match[2]
 
         # Print the state name and matching state ID for debugging
-        print(f"State Name: {state_name}")
-        print(f"Matching State ID: {state_id}")
+        add_log_message(f"State Name: {state_name}")
+        add_log_message(f"Matching State ID: {state_id}")
 
         return state_id
 
     except IndexError as e:
-        print(f"IndexError: {e}")
+        add_log_message(f"IndexError: {e}")
         return None
     except Exception as e:
-        print(f"Error: {str(e)}")
+        add_log_message(f"Error: {str(e)}")
         return None
 
 
@@ -297,11 +309,12 @@ def process_data():
 
         # Extract candidate details
         data_dict = extract_candidate_details(text_data)
-        print(f"Extracted data: {data_dict}")  # Debug print
+        add_log_message(f"Extracted data: {data_dict}")  # Add log message
 
         # Extract "Interview Round" as a string
         interview_round = data_dict.get("Interview Round", "")
-        print(f"Interview Round: {interview_round}")
+        # Add log message
+        add_log_message(f"Interview Round: {interview_round}")
 
         # Process date and time of interview
         if 'Date and Time of Interview' in data_dict:
@@ -314,7 +327,7 @@ def process_data():
         task_types = ['Resume Understanding', 'Resume Making/Reviewing',
                       'Technical Support', 'Assessment', 'Job Support', 'Training', 'Mock Interviews']
         task_type = find_closest_match(subject, task_types)
-        print("task_type", task_type)
+        add_log_message(f"task_type: {task_type}")  # Add log message
         user_id = None
         if task_type:
             try:
@@ -329,50 +342,32 @@ def process_data():
                             user_id = get_user_id_by_preference(
                                 cursor, preferred_by_candidate)
                             if user_id:
-                                print(
+                                add_log_message(
                                     f"User ID based on candidate preference: {user_id}")
                             else:
-                                print(
+                                add_log_message(
                                     "User not found based on candidate preference.")
 
                 # Enter the data into the database using the function
                 enter_data_into_db(data_dict, task_type, user_id)
-                logger.info("Database operation successful")
+                add_log_message("Database operation successful")
                 return jsonify(data_dict), 200
             except Exception as e:
-                # Log the error and add it to the error DataFrame
+                # Log the error
                 error_message = f"Database operation failed: {e}"
-                logger.error(error_message)
-                error_df = error_df.append(
-                    {"Timestamp": datetime.now(), "Error Message": error_message}, ignore_index=True)
+                add_log_message(error_message)
                 return jsonify({"error": "Database operation failed"}), 500
         else:
-            # Log the error and add it to the error DataFrame
+            # Log the error
             error_message = "Failed to determine the task type."
-            logger.error(error_message)
-            error_df = error_df.append(
-                {"Timestamp": datetime.now(), "Error Message": error_message}, ignore_index=True)
+            add_log_message(error_message)
             return jsonify({"error": error_message}), 400
 
     except Exception as e:
-        # Log the error here and add it to the error DataFrame
+        # Log the error
         error_message = f"An error occurred while processing the data: {e}"
-        logger.error(error_message)
-        error_df = error_df.append(
-            {"Timestamp": datetime.now(), "Error Message": error_message}, ignore_index=True)
+        add_log_message(error_message)
         return jsonify({"error": "An error occurred while processing the data."}), 500
-
-# Define a route to export the error DataFrame to a CSV file
-
-
-@ app.route('/export_errors', methods=['GET'])
-def export_errors():
-    if not error_df.empty:
-        # Export the error DataFrame to a CSV file
-        error_df.to_csv("error_log.csv", index=False)
-        return jsonify({"message": "Error log exported successfully."}), 200
-    else:
-        return jsonify({"message": "No errors to export."}), 200
 
 
 if __name__ == '__main__':
