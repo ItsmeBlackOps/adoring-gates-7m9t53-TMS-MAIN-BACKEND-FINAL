@@ -2,13 +2,12 @@ regex
 datetime
 pytz
 python-dateutil
-psycopg2
 pandas
 flask
+psycopg2
 flask_cors
 prometheus-flask-exporter
 fuzzywuzzy
 python-Levenshtein
 loguru
-spacy
-en_core_web_sm
+spacy==3.7.2 en_core_web_sm
