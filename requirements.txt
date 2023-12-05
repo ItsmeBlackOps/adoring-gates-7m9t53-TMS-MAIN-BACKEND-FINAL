@@ -10,3 +10,4 @@ prometheus-flask-exporter
 fuzzywuzzy
 python-Levenshtein
 loguru
+spacy
